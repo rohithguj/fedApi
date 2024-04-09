@@ -1,5 +1,7 @@
 import sqlite3
 
+from server import insert_user
+
 # Define database file name
 db_file = "my_database.db"
 
@@ -41,3 +43,5 @@ conn.commit()
 conn.close()
 
 print("Tables created successfully!")
+
+insert_user(1, "Admin", "Pass@321")
