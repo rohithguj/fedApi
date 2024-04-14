@@ -94,9 +94,11 @@ def close_db(conn):
 
 @app.route('/signup', methods=['GET'])
 def signup_fun():
+    # Get username and password from request params
     username = request.args.get('username')
     password = request.args.get('password')
 
+    # Connect to the database
     conn = sqlite3.connect(DATABASE_FILE)
     c = conn.cursor()
 
