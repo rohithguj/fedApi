@@ -1,6 +1,8 @@
 import time
 from flask import Flask, jsonify, request
 import sqlite3
+from flask_cors import CORS
+import random
 
 # Database file name
 DATABASE_FILE = "my_database.db"
@@ -8,6 +10,7 @@ DATABASE_FILE = "my_database.db"
 EMOTION_DICT = {"Angry" : 4, "Disgust": 5, "Fear": 27, "Happy": 26, "Sad": 25, "Surprise": 33, "Neutral": 32}
 
 app = Flask(__name__)
+CORS(app)
 
 def authenticate(username, password):
     conn = sqlite3.connect(DATABASE_FILE)
@@ -50,23 +53,31 @@ def generate_unique_user_id(cursor):
             return user_id
 
 def insert_user(username, password):
-    conn = sqlite3.connect(DATABASE_FILE)
-    c = conn.cursor()
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username=?", (username,))
+        existing_user = c.fetchone()
 
-    c.execute("SELECT * FROM users WHERE username=?", (username,))
-    existing_user = c.fetchone()
-
-    if existing_user:
-        print("User with username '{}' already exists. Skipping insertion.".format(username))
-    else:
+        if existing_user:
+            print("User with username '{}' already exists. Skipping insertion.".format(username))
+            return False  
+        
         user_id = generate_unique_user_id(c)
 
         c.execute("INSERT INTO users (id, username, password) VALUES (?, ?, ?)", (user_id, username, password))
-        print("User '{}' inserted successfully.".format(username))
-
         conn.commit()
 
-    conn.close()
+        print("User '{}' inserted successfully with ID {}".format(username, user_id))
+        return True 
+
+    except Exception as e:
+        print(f"Error inserting user: {e}")
+        return False
+
+    finally:
+        if conn:
+            conn.close()
 
 def insert_emotion(user_id, emotion, confidence, additional_data=None):
     conn = connect_db()
@@ -98,11 +109,25 @@ def signup_fun():
     username = request.args.get('username')
     password = request.args.get('password')
 
-    # Connect to the database
-    conn = sqlite3.connect(DATABASE_FILE)
-    c = conn.cursor()
+    try:
+        # Connect to the database
+        conn = sqlite3.connect(DATABASE_FILE)
+        c = conn.cursor()
 
-    insert_user(username, password)
+        # Insert user and handle potential errors
+        success = insert_user(username, password)
+        if success:
+            return jsonify({"message": "User created successfully"}), 201
+        else:
+            return jsonify({"error": "User creation failed"}), 400  # Adjust error code as needed
+
+    except Exception as e:
+        print(f"Error inserting user: {e}")
+        return jsonify({"error": "Internal server error"}), 500  # Generic error for UI
+
+    finally:
+        if conn:
+            conn.close()
 
 # Read all users endpoint
 @app.route("/users", methods=["GET"])
