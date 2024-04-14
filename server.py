@@ -41,6 +41,33 @@ def insert_user(user_id, username, password):
 
     conn.close()
 
+def generate_unique_user_id(cursor):
+    while True:
+        user_id = random.randint(1000, 9999) 
+        cursor.execute("SELECT COUNT(*) FROM users WHERE id=?", (user_id,))
+        count = cursor.fetchone()[0]
+        if count == 0:
+            return user_id
+
+def insert_user(username, password):
+    conn = sqlite3.connect(DATABASE_FILE)
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM users WHERE username=?", (username,))
+    existing_user = c.fetchone()
+
+    if existing_user:
+        print("User with username '{}' already exists. Skipping insertion.".format(username))
+    else:
+        user_id = generate_unique_user_id(c)
+
+        c.execute("INSERT INTO users (id, username, password) VALUES (?, ?, ?)", (user_id, username, password))
+        print("User '{}' inserted successfully.".format(username))
+
+        conn.commit()
+
+    conn.close()
+
 def insert_emotion(user_id, emotion, confidence, additional_data=None):
     conn = connect_db()
     cursor = conn.cursor()
@@ -64,6 +91,18 @@ def close_db(conn):
     if conn:
         conn.close()
 
+
+@app.route('/signup', methods=['GET'])
+def signup_fun():
+    # Get username and password from request params
+    username = request.args.get('username')
+    password = request.args.get('password')
+
+    # Connect to the database
+    conn = sqlite3.connect(DATABASE_FILE)
+    c = conn.cursor()
+
+    insert_user(username, password)
 
 # Read all users endpoint
 @app.route("/users", methods=["GET"])
@@ -128,6 +167,7 @@ def receive_emotion():
     
     try:
         insert_emotion(user_id=1, emotion=emotion, confidence=1.0)
+        # DATA TO SUMMERIZED FROM HERE
         return jsonify({"message": "Emotion recorded successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
