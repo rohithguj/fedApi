@@ -129,6 +129,46 @@ def signup_fun():
         if conn:
             conn.close()
 
+@app.route('/login', methods=['GET'])
+def login_fun():
+    username = request.args.get('username')
+    password = request.args.get('password')
+
+    print(username)
+    print(password)
+
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        c = conn.cursor()
+
+        c.execute("SELECT * FROM users WHERE username=?", (username,))
+        existing_user = c.fetchone()
+
+        if not existing_user: return jsonify({"error": "User not found"}), 500
+
+        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username,password,))
+        user = c.fetchone()
+
+        if user:
+            c.execute("SELECT id, username, password FROM users WHERE username=?", (username,))
+            user_data = c.fetchone()
+            user_id, username, password = user_data
+
+            return {
+                "userid": user_id,
+                "username": username,
+                "password": password
+            }
+        else : jsonify({"error": "Username or Password Incorrect"}), 500
+        
+    except Exception as e:
+        print(f"Error inserting user: {e}")
+        return jsonify({"error": "Internal server error"}), 500  # Generic error for UI
+
+    finally:
+        if conn:
+            conn.close()
+
 # Read all users endpoint
 @app.route("/users", methods=["GET"])
 def read_users():
