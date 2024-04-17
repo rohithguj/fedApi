@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS emotions (
   id INTEGER PRIMARY KEY,
   user_id INTEGER,
   timestamp DATETIME,
+  interval TEXT,
   emotion TEXT,
   confidence REAL,
   additional_data TEXT,

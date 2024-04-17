@@ -1,3 +1,4 @@
+import datetime
 import time
 from flask import Flask, jsonify, request
 import sqlite3
@@ -46,9 +47,6 @@ def insert_user(user_id, username, password):
 
 def generate_unique_user_id(cursor):
     while True:
-        user_id = random.randint(1000, 9999) 
-        cursor.execute("SELECT COUNT(*) FROM users WHERE id=?", (user_id,))
-        count = cursor.fetchone()[0]
         if count == 0:
             return user_id
 
@@ -79,16 +77,74 @@ def insert_user(username, password):
         if conn:
             conn.close()
 
-def insert_emotion(user_id, emotion, confidence, additional_data=None):
+def insert_emotion(user_id, emotion, confidence_rate, additional_data=None):
     conn = connect_db()
     cursor = conn.cursor()
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+
+    current_hour = int(time.strftime('%H', time.localtime()))
+
+    # Define the time intervals for the day
+    morning_start = 9
+    midday_start = 12
+    evening_start = 14
+    late_evening_start =  17
+    night_start = 20
+    late_night_start = 22
+
+    if current_hour >= morning_start and current_hour < midday_start:
+        time_interval = 'morning'
+    elif current_hour >= midday_start and current_hour < evening_start:
+        time_interval = 'midday'
+    elif current_hour >= evening_start and current_hour < late_evening_start:
+        time_interval = 'evening'
+    elif current_hour >= late_evening_start and current_hour < night_start:
+        time_interval = 'lateevening'
+    elif current_hour >= night_start and current_hour < late_night_start:
+        time_interval = 'night'
+    else:
+        time_interval = 'latenight'
+
     cursor.execute(
-        "INSERT INTO emotions (user_id, timestamp, emotion, confidence, additional_data) VALUES (?, ?, ?, ?, ?)",
-        (user_id, timestamp, emotion, confidence, additional_data)
+        "INSERT INTO emotions (user_id, timestamp, interval, emotion, confidence, additional_data) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, timestamp, time_interval, emotion, confidence_rate, additional_data)
     )
     conn.commit()
     close_db(conn)
+# Function to connect to the SQLite database
+def connect_db():
+    conn = sqlite3.connect('your_database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Function to fetch emotion data for a given time duration
+def fetch_emotion_data(user_id, start_date, end_date):
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    # Query to fetch emotion data for the specified user and time duration
+    query = """
+        SELECT emotion, timestamp 
+        FROM emotions 
+        WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?
+    """
+    cursor.execute(query, (user_id, start_date, end_date))
+    data = cursor.fetchall()
+
+    conn.close()
+    return data
+
+# Function to calculate the majority emotion during a given time period
+def calculate_majority_emotion(data):
+    emotion_count = {}
+    for row in data:
+        emotion = row['emotion']
+        emotion_count[emotion] = emotion_count.get(emotion, 0) + 1
+    if emotion_count:
+        majority_emotion = max(emotion_count, key=emotion_count.get)
+        return majority_emotion
+    else:
+        return None
 
 # Function to connect to the database
 def connect_db():
@@ -133,9 +189,6 @@ def signup_fun():
 def login_fun():
     username = request.args.get('username')
     password = request.args.get('password')
-
-    print(username)
-    print(password)
 
     try:
         conn = sqlite3.connect(DATABASE_FILE)
@@ -222,6 +275,7 @@ def receive_emotion():
     username = data.get("username")
     password = data.get("password")
     emotion = data.get("emotion")
+    confidence_rate = data.get("confidenceRate")
 
     if not username or not password or not emotion:
         return jsonify({"error": "Missing required fields"}), 400
@@ -231,7 +285,7 @@ def receive_emotion():
         return jsonify({"error": "Authentication failed"}), 401
     
     try:
-        insert_emotion(user_id=1, emotion=emotion, confidence=1.0)
+        insert_emotion(user_id=1, emotion=emotion, confidence_rate = confidence_rate)
         # DATA TO SUMMERIZED FROM HERE
         return jsonify({"message": "Emotion recorded successfully"}), 201
     except Exception as e:
@@ -279,10 +333,11 @@ def get_latest_emotion():
                 "id": result[0],
                 "user_id": result[1],
                 "timestamp": result[2],
-                "emotion": result[3],
-                "confidence": result[4],
-                "additional_data": result[5],
-                "emotion_id": EMOTION_DICT[result[3]]
+                "interval":result[3],
+                "emotion": result[4],
+                "confidence": result[5],
+                "additional_data": result[6],
+                "emotion_id": EMOTION_DICT[result[4]]
             }
             # Return the fetched data as JSON response
             return jsonify(emotion_data)
@@ -292,6 +347,37 @@ def get_latest_emotion():
     else:
         # If user does not exist or provided credentials are incorrect, return a message
         return jsonify({"message": "Invalid username or password."}), 404
+    
+@app.route('/data', methods=['GET'])
+def get_emotion_data():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'User ID is required'}), 400
+    
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = today - datetime.timedelta(days=1)
+    last_week = today - datetime.timedelta(weeks=1)
+    last_month = today - datetime.timedelta(days=30)
+    last_quarter = today - datetime.timedelta(days=90)
+    
+    durations = {
+        'Today': (today, datetime.now()),
+        'Yesterday': (yesterday, today),
+        'Last Week': (last_week, today),
+        'Last Month': (last_month, today),
+        'Last Quarter': (last_quarter, today)
+    }
+    
+    result = {}
+    for duration, (start_date, end_date) in durations.items():
+        data = fetch_emotion_data(user_id, start_date, end_date)
+        majority_emotion = calculate_majority_emotion(data)
+        result[duration] = {
+            'Majority Emotion': majority_emotion,
+            'Data': len(data)
+        }
+    
+    return jsonify(result)
 
 
 if __name__ == '__main__':
