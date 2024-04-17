@@ -348,36 +348,81 @@ def get_latest_emotion():
         # If user does not exist or provided credentials are incorrect, return a message
         return jsonify({"message": "Invalid username or password."}), 404
     
-@app.route('/data', methods=['GET'])
-def get_emotion_data():
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'User ID is required'}), 400
-    
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday = today - datetime.timedelta(days=1)
-    last_week = today - datetime.timedelta(weeks=1)
-    last_month = today - datetime.timedelta(days=30)
-    last_quarter = today - datetime.timedelta(days=90)
-    
-    durations = {
-        'Today': (today, datetime.now()),
-        'Yesterday': (yesterday, today),
-        'Last Week': (last_week, today),
-        'Last Month': (last_month, today),
-        'Last Quarter': (last_quarter, today)
-    }
-    
-    result = {}
-    for duration, (start_date, end_date) in durations.items():
-        data = fetch_emotion_data(user_id, start_date, end_date)
-        majority_emotion = calculate_majority_emotion(data)
-        result[duration] = {
-            'Majority Emotion': majority_emotion,
-            'Data': len(data)
-        }
-    
-    return jsonify(result)
+# def authenticate(username, password):
+#     # Connect to the database
+#     conn = sqlite3.connect(DATABASE_FILE)
+#     c = conn.cursor()
+
+#     # Query to fetch the user ID based on the provided username and password
+#     query = """
+#     SELECT id FROM users
+#     WHERE username = ? AND password = ?
+#     """
+#     c.execute(query, (username, password))
+#     user_id = c.fetchone()
+
+#     # Close the connection
+#     conn.close()
+
+#     # Check if user exists
+#     if user_id:
+#         return True
+#     else:
+#         return False
+
+@app.route('/get-data', methods=['POST'])
+def get_data():
+    try:
+        data = request.get_json()
+        user_id = data['user_id']
+        username = data['username']
+        password = data['password']
+        start = data['start']
+        end = data['end']
+        
+        if not username:
+            return jsonify({'error': 'No username provided'}), 400
+        
+        if not authenticate(username, password):
+            return jsonify({'error': 'Authentication failed'}), 401
+        
+        if start > end:
+            return jsonify({'error': 'Start date cannot be greater than end date'}), 400
+
+        conn = sqlite3.connect(DATABASE_FILE)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        query1 = """SELECT COUNT(*) FROM emotions WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?"""
+
+        c.execute(query1, (user_id, start, end))
+        result = c.fetchone()
+        total = result[0]
+        # print(total)
+        # print(result[0])
+
+        if total == 0:
+            return jsonify({'error': 'No data found'}), 404
+
+        percentage_dict = {}
+        for key in EMOTION_DICT.keys():
+            query = """SELECT COUNT(*) FROM emotions WHERE user_id = ? AND timestamp > ? AND timestamp < ? AND emotion = ?""" 
+            c.execute(query, (user_id, start, end, key))
+            result = c.fetchone()
+            percentage_dict[key] = result[0] / total * 100
+
+        return jsonify(percentage_dict)
+
+
+        # if result:
+        #     return jsonify({'data': dict(result)})
+        # else:
+        #     return jsonify({'error': 'User not found'}), 404
+
+    except sqlite3.Error as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 if __name__ == '__main__':
