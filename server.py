@@ -11,7 +11,7 @@ DATABASE_FILE = "my_database.db"
 EMOTION_DICT = {"Angry" : 4, "Disgust": 5, "Fear": 27, "Happy": 26, "Sad": 25, "Surprise": 33, "Neutral": 32}
 
 app = Flask(__name__)
-CORS(app)
+cors = CORS(app)
 
 def authenticate(username, password):
     conn = sqlite3.connect(DATABASE_FILE)
@@ -47,9 +47,13 @@ def insert_user(user_id, username, password):
 
 def generate_unique_user_id(cursor):
     while True:
+        user_id = random.randint(1000, 9999) 
+        cursor.execute("SELECT COUNT(*) FROM users WHERE id=?", (user_id,))
+        count = cursor.fetchone()[0]
         if count == 0:
             return user_id
 
+    
 def insert_user(username, password):
     try:
         conn = sqlite3.connect(DATABASE_FILE)
@@ -90,7 +94,7 @@ def insert_emotion(user_id, emotion, confidence_rate, additional_data=None):
     evening_start = 14
     late_evening_start =  17
     night_start = 20
-    late_night_start = 22
+    late_night_start = 22te
 
     if current_hour >= morning_start and current_hour < midday_start:
         time_interval = 'morning'
@@ -158,6 +162,22 @@ def close_db(conn):
     if conn:
         conn.close()
 
+def send_color(emotion):
+    # "Angry": 4, "Disgust": 5, "Fear": 27, "Happy": 26, "Sad": 25, "Surprise": 33, "Neutral": 32
+    if emotion == "Angry":
+        return "Sky Blue"
+    elif emotion == "Disgust":
+        return "Green"
+    elif emotion == "Fear":
+        return "White"
+    elif emotion == "Happy":
+        return "Pink"
+    elif emotion == "Sad":
+        return "Orange"
+    elif emotion == "Surprise":
+        return "Yellow"
+    elif emotion == "Neutral":
+        return "White"
 
 @app.route('/signup', methods=['GET'])
 def signup_fun():
@@ -337,7 +357,8 @@ def get_latest_emotion():
                 "emotion": result[4],
                 "confidence": result[5],
                 "additional_data": result[6],
-                "emotion_id": EMOTION_DICT[result[4]]
+                "emotion_id": EMOTION_DICT[result[4]],
+                "bulbcolor": send_color(result[4])
             }
             # Return the fetched data as JSON response
             return jsonify(emotion_data)
