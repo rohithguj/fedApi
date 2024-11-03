@@ -94,7 +94,7 @@ def insert_emotion(user_id, emotion, confidence_rate, additional_data=None):
     evening_start = 14
     late_evening_start =  17
     night_start = 20
-    late_night_start = 22te
+    late_night_start = 22
 
     if current_hour >= morning_start and current_hour < midday_start:
         time_interval = 'morning'
